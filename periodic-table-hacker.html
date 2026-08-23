@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELEMENT://ROOT_ACCESS</title>
+<style>
+  :root{
+    --bg:#040a05;
+    --grid-line:#0d2b12;
+    --green:#39ff6a;
+    --green-dim:#0f7a2e;
+    --green-bright:#a9ffb9;
+    --amber:#ffb000;
+    --cyan:#3df1ff;
+    --magenta:#ff3df1;
+    --red:#ff4444;
+    --panel-bg:#03110a;
+    --font-mono:"JetBrains Mono","Fira Code","Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--green);font-family:var(--font-mono);overflow-x:hidden;}
+  body{min-height:100vh;position:relative;}
+
+  canvas#rain{position:fixed;inset:0;z-index:0;opacity:0.35;pointer-events:none;}
+
+  .scanlines{position:fixed;inset:0;z-index:5;pointer-events:none;
+    background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,255,100,0.03) 3px, rgba(0,0,0,0) 4px);
+    mix-blend-mode:overlay;
+  }
+  .vignette{position:fixed;inset:0;z-index:4;pointer-events:none;
+    box-shadow:inset 0 0 180px 40px rgba(0,0,0,0.85);
+  }
+
+  .wrap{position:relative;z-index:10;max-width:1400px;margin:0 auto;padding:28px 16px 80px;}
+
+  .boot{
+    position:fixed;inset:0;z-index:100;background:#010502;color:var(--green);
+    font-size:13px;line-height:1.5;padding:24px;white-space:pre-wrap;
+    display:flex;align-items:flex-start;justify-content:flex-start;
+  }
+  .boot code{white-space:pre-wrap;}
+  .cursor-blink{display:inline-block;width:8px;height:14px;background:var(--green);margin-left:2px;animation:blink 1s steps(1) infinite;vertical-align:-2px;}
+  @keyframes blink{50%{opacity:0;}}
+
+  header.hdr{text-align:center;margin-bottom:18px;opacity:0;animation:fadeIn 0.8s ease forwards;}
+  @keyframes fadeIn{to{opacity:1;}}
+  .hdr h1{
+    font-size:clamp(22px,4.4vw,44px);letter-spacing:4px;margin:0 0 6px;
+    color:var(--green-bright);
+    text-shadow:0 0 6px var(--green), 0 0 22px rgba(57,255,106,0.5);
+    font-weight:700;
+  }
+  .hdr .sub{font-size:12px;letter-spacing:3px;color:var(--green-dim);}
+  .hdr .sub .live{color:var(--amber);}
+
+  .toolbar{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;
+    margin:18px 0 22px;font-size:11px;letter-spacing:1px;
+  }
+  .toolbar button{
+    font-family:var(--font-mono);background:transparent;border:1px solid var(--green-dim);
+    color:var(--green);padding:7px 12px;cursor:pointer;letter-spacing:1px;font-size:11px;
+    transition:all .15s ease;text-transform:uppercase;
+  }
+  .toolbar button:hover,.toolbar button.active{
+    background:var(--green);color:#02160a;box-shadow:0 0 14px rgba(57,255,106,.6);
+  }
+  .view-label{color:var(--green-dim);margin-left:8px;}
+  .view-btn{border-color:var(--cyan) !important;color:var(--cyan) !important;}
+  .view-btn:hover,.view-btn.active{background:var(--cyan) !important;color:#021014 !important;box-shadow:0 0 14px rgba(61,241,255,.6) !important;}
+  .search-box{
+    font-family:var(--font-mono);background:#02120a;border:1px solid var(--green-dim);
+    color:var(--green-bright);padding:7px 10px;font-size:12px;letter-spacing:1px;width:180px;
+  }
+  .search-box:focus{outline:none;border-color:var(--green);box-shadow:0 0 10px rgba(57,255,106,.4);}
+
+  .table-scroll{overflow-x:auto;padding-bottom:10px;}
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(18, minmax(46px,1fr));
+    grid-auto-rows:minmax(46px,1fr);
+    gap:3px;
+    min-width:900px;
+    margin:0 auto;
+  }
+  .gap-row{grid-column:1/-1;height:14px;}
+  .hidden{display:none !important;}
+
+  .viz-view{min-height:560px;display:grid;place-items:center;overflow:hidden;perspective:1000px;}
+  .viz-scene{position:relative;width:min(88vw,720px);height:520px;transform-style:preserve-3d;}
+  .viz-title{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:2px;color:var(--cyan);z-index:4;}
+  .viz-element{position:absolute;width:58px;height:58px;border:1px solid var(--hue,var(--green));background:rgba(3,17,10,.92);color:var(--hue,var(--green));display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;box-shadow:0 0 10px color-mix(in srgb,var(--hue,var(--green)) 45%,transparent);cursor:pointer;transition:opacity .2s,filter .2s,transform .2s;transform-style:preserve-3d;}
+  .viz-element:hover{z-index:20;filter:brightness(1.7);}
+  .viz-element.dim{opacity:.08;filter:grayscale(1);}
+  .viz-element b{font-size:17px;}.viz-element small{font-size:7px;margin-top:5px;color:var(--green-dim);}
+  .globe{position:absolute;top:50%;left:50%;width:420px;height:420px;transform:translate(-50%,-50%);border:1px solid rgba(61,241,255,.65);border-radius:50%;transform-style:preserve-3d;animation:spinGlobe 24s linear infinite;box-shadow:0 0 45px rgba(61,241,255,.16),inset 0 0 45px rgba(61,241,255,.12);}
+  .globe::before,.globe::after{content:"";position:absolute;inset:12%;border:1px solid rgba(61,241,255,.22);border-radius:50%;transform:rotateX(70deg);}.globe::after{transform:rotateY(70deg);}
+  @keyframes spinGlobe{to{transform:translate(-50%,-50%) rotateY(360deg);}}
+  .globe .viz-element{left:50%;top:50%;margin:-29px;}
+  .columns{height:440px;display:flex;align-items:end;justify-content:center;gap:7px;padding:60px 18px 30px;transform:rotateX(12deg) rotateY(-8deg);transform-style:preserve-3d;}
+  .column{width:38px;min-height:40px;background:linear-gradient(90deg,rgba(57,255,106,.18),rgba(61,241,255,.45),rgba(57,255,106,.12));border:1px solid var(--cyan);position:relative;display:flex;align-items:center;justify-content:end;flex-direction:column;padding:4px 2px;gap:3px;transform-style:preserve-3d;}
+  .column::before{content:"";position:absolute;top:-9px;left:-1px;width:100%;height:8px;border:1px solid var(--cyan);transform:skewX(-42deg);transform-origin:bottom;}.column .viz-element{position:relative;width:32px;height:32px;flex:none;}
+  .cylinder{position:absolute;top:50%;left:50%;width:360px;height:360px;transform:translate(-50%,-50%) rotateX(62deg);transform-style:preserve-3d;animation:spinCylinder 20s linear infinite;}
+  .cylinder::before,.cylinder::after{content:"";position:absolute;left:0;width:100%;height:70px;border:1px solid var(--magenta);border-radius:50%;box-shadow:0 0 25px rgba(255,61,241,.22);}.cylinder::before{top:-35px;}.cylinder::after{bottom:-35px;}
+  .cylinder .viz-element{left:50%;top:50%;margin:-29px;}
+  @keyframes spinCylinder{to{transform:translate(-50%,-50%) rotateX(62deg) rotateZ(360deg);}}
+  @media (max-width:600px){
+    .viz-view{min-height:470px;}.viz-scene{height:440px;transform:scale(.75);}
+    .globe{width:360px;height:360px;}.cylinder{width:300px;height:300px;}
+    .columns{gap:3px;padding-inline:4px;}.column{width:30px;}.column .viz-element{width:25px;height:25px;}.column .viz-element b{font-size:12px;}
+    .view-label{flex-basis:100%;text-align:center;margin:4px 0 0;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;scroll-behavior:auto !important;}
+  }
+
+  .cell{
+    position:relative;border:1px solid var(--grid-line);background:rgba(6,20,10,0.55);
+    padding:3px 4px;cursor:pointer;user-select:none;
+    display:flex;flex-direction:column;justify-content:space-between;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
+    opacity:0;transform:translateY(6px);
+  }
+  .cell.show{animation:cellIn .35s ease forwards;}
+  @keyframes cellIn{to{opacity:1;transform:translateY(0);}}
+
+  .cell:hover{
+    transform:translateY(-3px) scale(1.06);
+    z-index:20;
+    box-shadow:0 0 16px var(--hue,var(--green)), 0 0 3px var(--hue,var(--green)) inset;
+    border-color:var(--hue,var(--green));
+  }
+  .cell.dim{opacity:0.12 !important;filter:grayscale(1);}
+  .cell .num{font-size:9px;color:var(--green-dim);}
+  .cell .sym{font-size:16px;font-weight:700;color:var(--hue,var(--green));text-shadow:0 0 6px var(--hue,var(--green));line-height:1;}
+  .cell .name{font-size:7px;color:var(--green-dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+
+  .legend{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin:22px 0 6px;font-size:10px;letter-spacing:1px;color:var(--green-dim);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:10px;height:10px;display:inline-block;box-shadow:0 0 6px currentColor;background:currentColor;}
+
+  /* ---- terminal decode overlay ---- */
+  .overlay{
+    position:fixed;inset:0;z-index:200;background:rgba(1,5,2,0.88);
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .2s ease;
+    padding:20px;
+  }
+  .overlay.active{opacity:1;pointer-events:all;}
+  .panel{
+    width:min(560px,92vw);background:var(--panel-bg);border:1px solid var(--green);
+    box-shadow:0 0 40px rgba(57,255,106,.35), 0 0 0 1px rgba(57,255,106,.15) inset;
+    padding:22px 24px 26px;position:relative;
+  }
+  .panel::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--green),transparent);
+    animation:scan 1.4s linear infinite;
+  }
+  @keyframes scan{0%{transform:translateY(0);}100%{transform:translateY(280px);}}
+  .panel .close{
+    position:absolute;top:10px;right:14px;color:var(--green-dim);cursor:pointer;
+    font-size:14px;background:none;border:none;font-family:var(--font-mono);
+  }
+  .panel .close:hover{color:var(--red);}
+  .term-line{font-size:12px;color:var(--green-dim);margin-bottom:4px;letter-spacing:.5px;}
+  .term-line b{color:var(--green);}
+  .big-symbol{
+    font-size:64px;font-weight:700;line-height:1;margin:10px 0 4px;
+    color:var(--hue,var(--green));text-shadow:0 0 10px var(--hue,var(--green)), 0 0 30px var(--hue,var(--green));
+  }
+  .big-name{font-size:20px;letter-spacing:3px;color:var(--green-bright);margin-bottom:14px;text-transform:uppercase;}
+  .data-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;font-size:12px;margin-top:6px;}
+  .data-grid div span.k{color:var(--green-dim);display:block;font-size:9px;letter-spacing:1px;text-transform:uppercase;}
+  .data-grid div span.v{color:var(--green-bright);font-size:14px;}
+  .decrypt-bar{height:4px;background:#0a2c14;margin:16px 0 8px;overflow:hidden;}
+  .decrypt-bar i{display:block;height:100%;width:0;background:var(--hue,var(--green));box-shadow:0 0 8px var(--hue,var(--green));animation:fillbar .55s ease forwards;}
+  @keyframes fillbar{to{width:100%;}}
+  .glitch-text{font-size:11px;color:var(--green-dim);min-height:16px;}
+
+  footer.foot{text-align:center;margin-top:36px;font-size:10px;letter-spacing:2px;color:var(--green-dim);opacity:.7;}
+  .logwatch{margin:34px auto 0;max-width:1100px;border-top:1px solid var(--green-dim);padding-top:20px;}
+  .logwatch h2{font-size:16px;letter-spacing:3px;color:var(--cyan);margin:0 0 14px;text-align:center;}
+  .log-controls{display:flex;justify-content:center;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+  .log-controls input[type=file]{max-width:260px;color:var(--green-dim);font:11px var(--font-mono);}
+  .log-controls button{font:11px var(--font-mono);letter-spacing:1px;padding:7px 12px;background:transparent;border:1px solid var(--cyan);color:var(--cyan);cursor:pointer;}
+  .log-controls button:hover{background:var(--cyan);color:#021014;}
+  .log-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+  .log-metric{border:1px solid var(--grid-line);padding:10px;background:rgba(6,20,10,.7);text-align:center;}
+  .log-metric b{display:block;font-size:22px;color:var(--green-bright);}.log-metric span{font-size:9px;color:var(--green-dim);letter-spacing:1px;}
+  .log-table{width:100%;border-collapse:collapse;font-size:11px;text-align:left;}.log-table th,.log-table td{border-bottom:1px solid var(--grid-line);padding:8px;color:var(--green-bright);}.log-table th{color:var(--green-dim);font-size:9px;letter-spacing:1px;}.log-table .alert{color:var(--amber);}.log-table .blocked{color:var(--red);}
+  @media(max-width:600px){.log-metrics{grid-template-columns:1fr;}.log-table{font-size:10px;}}
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<div class="boot" id="boot">
+  <code id="bootText"></code>
+</div>
+
+<div class="wrap" id="mainUI" style="display:none;">
+  <header class="hdr">
+    <h1>ELEMENT :: ROOT_ACCESS</h1>
+    <div class="sub">PERIODIC_DATABASE.SYS &nbsp;//&nbsp; <span class="live">118 NODES ONLINE</span> &nbsp;//&nbsp; SELECT A NODE TO BREACH</div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search-box" id="search" placeholder="grep --symbol|name..." autocomplete="off">
+    <button data-filter="all" class="active">ALL</button>
+    <button data-filter="alkali">ALKALI</button>
+    <button data-filter="alkaline">ALKALINE</button>
+    <button data-filter="transition">TRANSITION</button>
+    <button data-filter="post">POST-METAL</button>
+    <button data-filter="metalloid">METALLOID</button>
+    <button data-filter="nonmetal">NONMETAL</button>
+    <button data-filter="halogen">HALOGEN</button>
+    <button data-filter="noble">NOBLE</button>
+    <button data-filter="lanthanide">LANTHANIDE</button>
+    <button data-filter="actinide">ACTINIDE</button>
+    <span class="view-label">VIEW:</span>
+    <button class="view-btn active" data-view="table">TABLE</button>
+    <button class="view-btn" data-view="globe">GLOBE</button>
+    <button class="view-btn" data-view="columns">COLUMNS</button>
+    <button class="view-btn" data-view="cylinder">CYLINDER</button>
+  </div>
+
+  <div class="table-scroll">
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="viz-view hidden" id="vizView">
+    <div class="viz-scene" id="vizScene"></div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <section class="logwatch" aria-labelledby="logwatch-title">
+    <h2 id="logwatch-title">LOGWATCH // LIVE EVENTS</h2>
+    <div class="log-controls">
+      <input id="jsonFile" type="file" accept=".json,.jsonl,.ndjson,text/plain">
+      <button id="loadJson" type="button">LOAD JSONL</button>
+    </div>
+    <div class="log-metrics">
+      <div class="log-metric"><b id="metricAlerts">0</b><span>ALERTS</span></div>
+      <div class="log-metric"><b id="metricBlocked">0</b><span>BLOCKED</span></div>
+      <div class="log-metric"><b id="metricScanned">0</b><span>SCANNED LINES</span></div>
+    </div>
+    <table class="log-table"><thead><tr><th>EVENT</th><th>IP</th><th>USER</th><th>ATTEMPTS</th><th>TIME</th></tr></thead><tbody id="eventRows"><tr><td colspan="5">No JSONL loaded</td></tr></tbody></table>
+  </section>
+
+  <footer class="foot">root@periodic:~# awaiting_input _</footer>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="panel" id="panel">
+    <button class="close" id="closeBtn">[ X ] CLOSE</button>
+    <div class="term-line">&gt; connecting to node <b id="pNum"></b>...</div>
+    <div class="term-line">&gt; decrypting atomic signature <span id="pStatus">[OK]</span></div>
+    <div class="decrypt-bar"><i id="pBar"></i></div>
+    <div class="big-symbol" id="pSym"></div>
+    <div class="big-name" id="pName"></div>
+    <div class="glitch-text" id="pGlitch"></div>
+    <div class="data-grid">
+      <div><span class="k">Atomic Mass</span><span class="v" id="pMass"></span></div>
+      <div><span class="k">Category</span><span class="v" id="pCat"></span></div>
+      <div><span class="k">Period</span><span class="v" id="pPeriod"></span></div>
+      <div><span class="k">Group</span><span class="v" id="pGroup"></span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= DATA ================= */
+const CAT_COLOR = {
+  alkali:"#ff6b6b", alkaline:"#ffb000", transition:"#3df1ff", post:"#39ff6a",
+  metalloid:"#ff3df1", nonmetal:"#a9ffb9", halogen:"#ffea00", noble:"#7a5cff",
+  lanthanide:"#ff8c42", actinide:"#ff4d6d", special:"#39ff6a"
+};
+const CAT_LABEL = {
+  alkali:"Alkali Metal", alkaline:"Alkaline Earth", transition:"Transition Metal",
+  post:"Post-Transition Metal", metalloid:"Metalloid", nonmetal:"Reactive Nonmetal",
+  halogen:"Halogen", noble:"Noble Gas", lanthanide:"Lanthanide", actinide:"Actinide", special:"Nonmetal"
+};
+
+// [num, sym, name, mass, category, period, group]
+const RAW = [
+[1,"H","Hydrogen",1.008,"special",1,1],[2,"He","Helium",4.003,"noble",1,18],
+[3,"Li","Lithium",6.94,"alkali",2,1],[4,"Be","Beryllium",9.012,"alkaline",2,2],
+[5,"B","Boron",10.81,"metalloid",2,13],[6,"C","Carbon",12.011,"special",2,14],
+[7,"N","Nitrogen",14.007,"special",2,15],[8,"O","Oxygen",15.999,"special",2,16],
+[9,"F","Fluorine",18.998,"halogen",2,17],[10,"Ne","Neon",20.18,"noble",2,18],
+[11,"Na","Sodium",22.99,"alkali",3,1],[12,"Mg","Magnesium",24.305,"alkaline",3,2],
+[13,"Al","Aluminium",26.982,"post",3,13],[14,"Si","Silicon",28.085,"metalloid",3,14],
+[15,"P","Phosphorus",30.974,"special",3,15],[16,"S","Sulfur",32.06,"special",3,16],
+[17,"Cl","Chlorine",35.45,"halogen",3,17],[18,"Ar","Argon",39.948,"noble",3,18],
+[19,"K","Potassium",39.098,"alkali",4,1],[20,"Ca","Calcium",40.078,"alkaline",4,2],
+[21,"Sc","Scandium",44.956,"transition",4,3],[22,"Ti","Titanium",47.867,"transition",4,4],
+[23,"V","Vanadium",50.942,"transition",4,5],[24,"Cr","Chromium",51.996,"transition",4,6],
+[25,"Mn","Manganese",54.938,"transition",4,7],[26,"Fe","Iron",55.845,"transition",4,8],
+[27,"Co","Cobalt",58.933,"transition",4,9],[28,"Ni","Nickel",58.693,"transition",4,10],
+[29,"Cu","Copper",63.546,"transition",4,11],[30,"Zn","Zinc",65.38,"transition",4,12],
+[31,"Ga","Gallium",69.723,"post",4,13],[32,"Ge","Germanium",72.63,"metalloid",4,14],
+[33,"As","Arsenic",74.922,"metalloid",4,15],[34,"Se","Selenium",78.971,"special",4,16],
+[35,"Br","Bromine",79.904,"halogen",4,17],[36,"Kr","Krypton",83.798,"noble",4,18],
+[37,"Rb","Rubidium",85.468,"alkali",5,1],[38,"Sr","Strontium",87.62,"alkaline",5,2],
+[39,"Y","Yttrium",88.906,"transition",5,3],[40,"Zr","Zirconium",91.224,"transition",5,4],
+[41,"Nb","Niobium",92.906,"transition",5,5],[42,"Mo","Molybdenum",95.95,"transition",5,6],
+[43,"Tc","Technetium",98,"transition",5,7],[44,"Ru","Ruthenium",101.07,"transition",5,8],
+[45,"Rh","Rhodium",102.906,"transition",5,9],[46,"Pd","Palladium",106.42,"transition",5,10],
+[47,"Ag","Silver",107.868,"transition",5,11],[48,"Cd","Cadmium",112.414,"transition",5,12],
+[49,"In","Indium",114.818,"post",5,13],[50,"Sn","Tin",118.71,"post",5,14],
+[51,"Sb","Antimony",121.76,"metalloid",5,15],[52,"Te","Tellurium",127.6,"metalloid",5,16],
+[53,"I","Iodine",126.904,"halogen",5,17],[54,"Xe","Xenon",131.293,"noble",5,18],
+[55,"Cs","Caesium",132.905,"alkali",6,1],[56,"Ba","Barium",137.327,"alkaline",6,2],
+[72,"Hf","Hafnium",178.49,"transition",6,4],[73,"Ta","Tantalum",180.948,"transition",6,5],
+[74,"W","Tungsten",183.84,"transition",6,6],[75,"Re","Rhenium",186.207,"transition",6,7],
+[76,"Os","Osmium",190.23,"transition",6,8],[77,"Ir","Iridium",192.217,"transition",6,9],
+[78,"Pt","Platinum",195.085,"transition",6,10],[79,"Au","Gold",196.967,"transition",6,11],
+[80,"Hg","Mercury",200.592,"transition",6,12],[81,"Tl","Thallium",204.38,"post",6,13],
+[82,"Pb","Lead",207.2,"post",6,14],[83,"Bi","Bismuth",208.98,"post",6,15],
+[84,"Po","Polonium",209,"post",6,16],[85,"At","Astatine",210,"metalloid",6,17],
+[86,"Rn","Radon",222,"noble",6,18],
+[87,"Fr","Francium",223,"alkali",7,1],[88,"Ra","Radium",226,"alkaline",7,2],
+[104,"Rf","Rutherfordium",267,"transition",7,4],[105,"Db","Dubnium",268,"transition",7,5],
+[106,"Sg","Seaborgium",269,"transition",7,6],[107,"Bh","Bohrium",270,"transition",7,7],
+[108,"Hs","Hassium",269,"transition",7,8],[109,"Mt","Meitnerium",278,"transition",7,9],
+[110,"Ds","Darmstadtium",281,"transition",7,10],[111,"Rg","Roentgenium",282,"transition",7,11],
+[112,"Cn","Copernicium",285,"transition",7,12],[113,"Nh","Nihonium",286,"post",7,13],
+[114,"Fl","Flerovium",289,"post",7,14],[115,"Mc","Moscovium",290,"post",7,15],
+[116,"Lv","Livermorium",293,"post",7,16],[117,"Ts","Tennessine",294,"halogen",7,17],
+[118,"Og","Oganesson",294,"noble",7,18],
+// Lanthanides row (visual row 9, cols 4-18)
+[57,"La","Lanthanum",138.905,"lanthanide",9,4],[58,"Ce","Cerium",140.116,"lanthanide",9,5],
+[59,"Pr","Praseodymium",140.908,"lanthanide",9,6],[60,"Nd","Neodymium",144.242,"lanthanide",9,7],
+[61,"Pm","Promethium",145,"lanthanide",9,8],[62,"Sm","Samarium",150.36,"lanthanide",9,9],
+[63,"Eu","Europium",151.964,"lanthanide",9,10],[64,"Gd","Gadolinium",157.25,"lanthanide",9,11],
+[65,"Tb","Terbium",158.925,"lanthanide",9,12],[66,"Dy","Dysprosium",162.5,"lanthanide",9,13],
+[67,"Ho","Holmium",164.93,"lanthanide",9,14],[68,"Er","Erbium",167.259,"lanthanide",9,15],
+[69,"Tm","Thulium",168.934,"lanthanide",9,16],[70,"Yb","Ytterbium",173.045,"lanthanide",9,17],
+[71,"Lu","Lutetium",174.967,"lanthanide",9,18],
+// Actinides row (visual row 10, cols 4-18)
+[89,"Ac","Actinium",227,"actinide",10,4],[90,"Th","Thorium",232.038,"actinide",10,5],
+[91,"Pa","Protactinium",231.036,"actinide",10,6],[92,"U","Uranium",238.029,"actinide",10,7],
+[93,"Np","Neptunium",237,"actinide",10,8],[94,"Pu","Plutonium",244,"actinide",10,9],
+[95,"Am","Americium",243,"actinide",10,10],[96,"Cm","Curium",247,"actinide",10,11],
+[97,"Bk","Berkelium",247,"actinide",10,12],[98,"Cf","Californium",251,"actinide",10,13],
+[99,"Es","Einsteinium",252,"actinide",10,14],[100,"Fm","Fermium",257,"actinide",10,15],
+[101,"Md","Mendelevium",258,"actinide",10,16],[102,"No","Nobelium",259,"actinide",10,17],
+[103,"Lr","Lawrencium",266,"actinide",10,18],
+];
+
+const ELEMENTS = RAW.map(r=>({num:r[0],sym:r[1],name:r[2],mass:r[3],cat:r[4],period:r[5],group:r[6]}));
+
+/* ================= MATRIX RAIN ================= */
+const canvas = document.getElementById('rain');
+const ctx = canvas.getContext('2d');
+let W,H,cols,drops;
+function resize(){
+  W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight;
+  cols=Math.floor(W/16); drops=Array(cols).fill(0);
+}
+resize(); window.addEventListener('resize',resize);
+const chars="アイウエオカキクケコサシスセソ0123456789";
+function drawRain(){
+  ctx.fillStyle="rgba(4,10,5,0.08)"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#39ff6a"; ctx.font="14px monospace";
+  for(let i=0;i<drops.length;i++){
+    const text=chars[Math.floor(Math.random()*chars.length)];
+    ctx.fillText(text, i*16, drops[i]*16);
+    if(drops[i]*16>H && Math.random()>0.975) drops[i]=0;
+    drops[i]++;
+  }
+  requestAnimationFrame(drawRain);
+}
+drawRain();
+
+/* ================= BOOT SEQUENCE ================= */
+const bootLines = [
+"[BOOT] initializing kernel modules...",
+"[ OK ] loading periodic_database.sys",
+"[ OK ] mounting /dev/elements (118 nodes found)",
+"[ OK ] establishing secure uplink...",
+"[WARN] firewall bypass: symbol-table unlocked",
+"[ OK ] rendering interface...",
+"root@periodic:~# access granted_"
+];
+const bootEl=document.getElementById('bootText');
+let li=0,ci=0;
+function typeBoot(){
+  if(li>=bootLines.length){
+    setTimeout(()=>{
+      document.getElementById('boot').style.display='none';
+      const ui=document.getElementById('mainUI');
+      ui.style.display='block';
+      buildGrid();
+      buildLegend();
+      buildViews();
+    },350);
+    return;
+  }
+  const line=bootLines[li];
+  if(ci<=line.length){
+    let shown='';
+    for(let k=0;k<li;k++) shown+=bootLines[k]+"\n";
+    shown+=line.slice(0,ci);
+    bootEl.innerHTML = shown.replace(/\[ OK \]/g,'<span style="color:#39ff6a">[ OK ]</span>').replace(/\[WARN\]/g,'<span style="color:#ffb000">[WARN]</span>').replace(/\[BOOT\]/g,'<span style="color:#3df1ff">[BOOT]</span>') + '<span class="cursor-blink"></span>';
+    ci++;
+    setTimeout(typeBoot, 8+Math.random()*18);
+  } else {
+    li++; ci=0;
+    setTimeout(typeBoot, 120);
+  }
+}
+typeBoot();
+
+/* ================= GRID BUILD ================= */
+function buildGrid(){
+  const grid=document.getElementById('grid');
+  grid.innerHTML='';
+  // gap spacer between row7 and row9(lanthanide block)
+  ELEMENTS.forEach((el,idx)=>{
+    const c=document.createElement('div');
+    c.className='cell';
+    c.style.gridRow=el.period;
+    c.style.gridColumn=el.group;
+    c.style.setProperty('--hue', CAT_COLOR[el.cat]);
+    c.dataset.cat=el.cat;
+    c.dataset.name=el.name.toLowerCase();
+    c.dataset.sym=el.sym.toLowerCase();
+    c.innerHTML=`<span class="num">${el.num}</span><span class="sym">${el.sym}</span><span class="name">${el.name}</span>`;
+    c.addEventListener('click',()=>openPanel(el));
+    grid.appendChild(c);
+    setTimeout(()=>c.classList.add('show'), idx*4);
+  });
+}
+
+function createVizElement(el){
+  const node=document.createElement('button');
+  node.className='viz-element';
+  node.type='button';
+  node.dataset.cat=el.cat;
+  node.dataset.name=el.name.toLowerCase();
+  node.dataset.sym=el.sym.toLowerCase();
+  node.style.setProperty('--hue',CAT_COLOR[el.cat]);
+  node.innerHTML=`<b>${el.sym}</b><small>${el.num}</small>`;
+  node.addEventListener('click',()=>openPanel(el));
+  return node;
+}
+
+function buildViews(){
+  const scene=document.getElementById('vizScene');
+  document.querySelectorAll('.view-btn').forEach(button=>button.addEventListener('click',()=>{
+    document.querySelectorAll('.view-btn').forEach(item=>item.classList.remove('active'));
+    button.classList.add('active');
+    renderView(button.dataset.view);
+  }));
+  renderView('table');
+
+  function renderView(view){
+    const table=document.querySelector('.table-scroll');
+    const viz=document.getElementById('vizView');
+    table.classList.toggle('hidden',view!=='table');
+    viz.classList.toggle('hidden',view==='table');
+    if(view==='table') return;
+    scene.innerHTML=`<div class="viz-title">${view.toUpperCase()} // ATOMIC NODES</div>`;
+    if(view==='globe'){
+      const globe=document.createElement('div');
+      globe.className='globe';
+      ELEMENTS.forEach((el,index)=>{
+        const theta=Math.acos(1-(2*(index+.5)/ELEMENTS.length));
+        const phi=Math.PI*(1+Math.sqrt(5))*index;
+        const node=createVizElement(el);
+        node.style.transform=`translate3d(${Math.sin(theta)*Math.cos(phi)*180}px,${Math.cos(theta)*180}px,${Math.sin(theta)*Math.sin(phi)*180}px)`;
+        globe.appendChild(node);
+      });
+      scene.appendChild(globe);
+    } else if(view==='cylinder'){
+      const cylinder=document.createElement('div');
+      cylinder.className='cylinder';
+      ELEMENTS.forEach((el,index)=>{
+        const angle=(index/ELEMENTS.length)*Math.PI*2;
+        const node=createVizElement(el);
+        node.style.transform=`translate3d(${Math.cos(angle)*150}px,${(index/ELEMENTS.length-.5)*315}px,${Math.sin(angle)*150}px) rotateY(${angle}rad)`;
+        cylinder.appendChild(node);
+      });
+      scene.appendChild(cylinder);
+    } else {
+      const columns=document.createElement('div');
+      columns.className='columns';
+      Object.keys(CAT_LABEL).filter(cat=>cat!=='special').forEach(cat=>{
+        const column=document.createElement('div');
+        column.className='column';
+        ELEMENTS.filter(el=>el.cat===cat).slice(0,8).forEach(el=>column.appendChild(createVizElement(el)));
+        columns.appendChild(column);
+      });
+      scene.appendChild(columns);
+    }
+    if(typeof applyVisibility==='function') applyVisibility();
+  }
+}
+
+function buildLegend(){
+  const legend=document.getElementById('legend');
+  legend.innerHTML = Object.keys(CAT_LABEL).filter(k=>k!=='special').map(k=>
+    `<span><i style="color:${CAT_COLOR[k]}"></i>${CAT_LABEL[k]}</span>`
+  ).join('') + `<span><i style="color:${CAT_COLOR.special}"></i>Reactive Nonmetal</span>`;
+}
+
+/* ================= FILTER + SEARCH ================= */
+let activeFilter='all';
+let searchQuery='';
+function applyVisibility(){
+  document.querySelectorAll('.cell, .viz-element').forEach(c=>{
+    const categoryMatch=activeFilter==='all'||c.dataset.cat===activeFilter||(activeFilter==='nonmetal'&&c.dataset.cat==='special');
+    const searchMatch=!searchQuery||c.dataset.name.includes(searchQuery)||c.dataset.sym.includes(searchQuery);
+    c.classList.toggle('dim',!categoryMatch||!searchMatch);
+  });
+}
+document.addEventListener('click',(e)=>{
+  if(e.target.matches('.toolbar button[data-filter]')){
+    document.querySelectorAll('.toolbar button').forEach(b=>b.classList.remove('active'));
+    e.target.classList.add('active');
+    activeFilter=e.target.dataset.filter;
+    applyVisibility();
+  }
+});
+document.getElementById('search').addEventListener('input',(e)=>{
+  searchQuery=e.target.value.toLowerCase().trim();
+  document.querySelectorAll('.toolbar button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.toolbar button[data-filter="all"]').classList.add('active');
+  activeFilter='all';
+  applyVisibility();
+});
+
+/* ================= PANEL / DECODE ================= */
+const overlay=document.getElementById('overlay');
+const glitchChars="!<>-_\\/[]{}—=+*^?#________";
+function glitchReveal(el, finalText, duration){
+  let frame=0; const totalFrames=Math.floor(duration/30);
+  const iv=setInterval(()=>{
+    let out='';
+    for(let i=0;i<finalText.length;i++){
+      if(i < (finalText.length*frame/totalFrames)) out+=finalText[i];
+      else out+= (finalText[i]===' ') ? ' ' : glitchChars[Math.floor(Math.random()*glitchChars.length)];
+    }
+    el.textContent=out;
+    frame++;
+    if(frame>totalFrames){el.textContent=finalText; clearInterval(iv);}
+  },30);
+}
+
+function openPanel(el){
+  const panel=document.getElementById('panel');
+  panel.style.setProperty('--hue', CAT_COLOR[el.cat]);
+  document.getElementById('pNum').textContent = 'ATOM-'+String(el.num).padStart(3,'0');
+  document.getElementById('pStatus').textContent='[working...]';
+  document.getElementById('pBar').style.animation='none'; void document.getElementById('pBar').offsetWidth; document.getElementById('pBar').style.animation='fillbar .6s ease forwards';
+  document.getElementById('pSym').textContent=el.sym;
+  document.getElementById('pSym').style.setProperty('--hue', CAT_COLOR[el.cat]);
+  document.getElementById('pMass').textContent=el.mass;
+  document.getElementById('pCat').textContent=CAT_LABEL[el.cat];
+  document.getElementById('pPeriod').textContent=el.period<=7?el.period:(el.period===9?'6 (f-block)':'7 (f-block)');
+  document.getElementById('pGroup').textContent=el.group;
+
+  glitchReveal(document.getElementById('pName'), el.name.toUpperCase(), 500);
+  glitchReveal(document.getElementById('pGlitch'), '> signature match: '+(97+Math.floor(Math.random()*3))+'.'+Math.floor(Math.random()*9)+'% confidence', 650);
+
+  overlay.classList.add('active');
+  setTimeout(()=>{document.getElementById('pStatus').textContent='[OK]';},600);
+}
+document.getElementById('closeBtn').addEventListener('click',()=>overlay.classList.remove('active'));
+overlay.addEventListener('click',(e)=>{ if(e.target===overlay) overlay.classList.remove('active'); });
+document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') overlay.classList.remove('active'); });
+
+/* ================= LOGWATCH JSONL DASHBOARD ================= */
+function renderLogwatch(text){
+  const events=text.split(/\r?\n/).filter(Boolean).map(line=>JSON.parse(line));
+  const alerts=events.filter(event=>event.type==='alert');
+  const blocked=events.filter(event=>event.type==='blocked');
+  const summary=events.find(event=>event.type==='summary');
+  document.getElementById('metricAlerts').textContent=alerts.length;
+  document.getElementById('metricBlocked').textContent=blocked.length;
+  document.getElementById('metricScanned').textContent=summary?summary.scanned_lines:0;
+  document.getElementById('eventRows').innerHTML=events.filter(event=>event.type!=='summary').map(event=>{
+    const date=event.timestamp?new Date(event.timestamp*1000).toISOString():'-';
+    return `<tr><td class="${event.type}">${event.type.toUpperCase()}</td><td>${event.ip||'-'}</td><td>${event.user||'-'}</td><td>${event.attempts||'-'}</td><td>${date}</td></tr>`;
+  }).join('')||'<tr><td colspan="5">No events</td></tr>';
+}
+document.getElementById('loadJson').addEventListener('click',()=>{
+  const file=document.getElementById('jsonFile').files[0];
+  if(!file) return;
+  file.text().then(renderLogwatch).catch(()=>{document.getElementById('eventRows').innerHTML='<tr><td colspan="5">Invalid JSONL</td></tr>';});
+});
+</script>
+</body>
+</html>
